@@ -1,0 +1,1 @@
+{"tag_name": "v2.0.0", "name": "v2.0.0", "body": "## ACE-KILLER v2.0.0\n\n### 新增\n- RAM 盘重定向: 将 ACE 临时目录映射到内存\n- ACE 进程列表扩展\n- 目录符号链接重定向\n\n### 功能\n- 自动关闭 ACE-Tray.exe 弹窗\n- 自动优化 SGuard64.exe 扫盘\n- RAM 盘重定向减少 SSD 损伤\n- 内存清理\n- 进程 I/O 优先级管理\n- Ant Design 风格 UI\n- 系统托盘/通知/自启动\n\n需要管理员权限运行", "draft": false, "prerelease": false}

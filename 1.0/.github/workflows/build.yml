@@ -1,0 +1,238 @@
+name: 构建和发布ACE-KILLER
+
+permissions:
+  contents: write
+  packages: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "版本号 (例如: 1.0.0)"
+        required: true
+        default: "1.1.4"
+      release_notes:
+        description: "发布说明"
+        required: false
+        default: "此版本包含性能改进和错误修复"
+
+jobs:
+  build:
+    name: 构建Windows应用
+    runs-on: windows-latest
+    env:
+      PYTHONIOENCODING: utf-8
+      PYTHONLEGACYWINDOWSSTDIO: 1
+      PIP_DISABLE_PIP_VERSION_CHECK: 1
+      NUITKA_DOWNLOAD_CONFIRMATION: 1
+      PYTHONOPTIMIZE: 1
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: 设置Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: "pip"
+          cache-dependency-path: "requirements.txt"
+
+      - name: 缓存PySide6和Nuitka
+        uses: actions/cache@v4
+        id: cache-deps
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.cache/Nuitka
+            ~/.local/share/Nuitka
+            ~/AppData/Local/pip/Cache
+          key: ${{ runner.os }}-pyside6-nuitka-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pyside6-nuitka-
+
+      - name: 安装Python依赖
+        run: |
+          Write-Host "📦 安装Python依赖..."
+
+          python -m pip install --upgrade pip wheel --quiet
+          pip install -r requirements.txt --quiet
+          Write-Host "✅ Python依赖安装完成"
+
+      - name: 准备构建环境
+        run: |
+          Write-Host "🔧 准备构建环境..."
+
+          # 更新版本号
+          echo "${{ github.event.inputs.version }}" | Out-File -FilePath "VERSION" -Encoding utf8 -NoNewline
+          Write-Host "✅ 已更新 VERSION 文件为: ${{ github.event.inputs.version }}"
+
+          # 更新 utils/version_checker.py 中的版本号
+          $versionCheckerPath = "utils/version_checker.py"
+          if (Test-Path $versionCheckerPath) {
+            (Get-Content -Path $versionCheckerPath -Raw) -replace '__version__ = ".*"', '__version__ = "${{ github.event.inputs.version }}"' | Set-Content -Path $versionCheckerPath -Encoding utf8
+            Write-Host "✅ 已更新 version_checker.py 中的版本号"
+          }
+
+          # 清理构建文件
+          @("main.dist", "main.build", "main.onefile-build", "nuitka-crash-report.xml") | ForEach-Object {
+            if (Test-Path $_) { Remove-Item -Recurse -Force $_ }
+          }
+
+          # 清理Python缓存
+          Get-ChildItem -Path . -Recurse -Name "__pycache__" -ErrorAction SilentlyContinue | ForEach-Object { 
+            try { Remove-Item -Recurse -Force $_ } catch { Write-Warning "无法删除: $_" }
+          }
+
+          Write-Host "✅ 构建环境准备完成"
+        shell: pwsh
+
+      - name: 使用Nuitka打包应用程序
+        run: |
+          # 包体积优化说明：
+          # 1. --nofollow-import-to: 排除大量不需要的Python库和模块
+          # 2. --python-flag=no_docstrings: 移除文档字符串以减小体积
+          # 3. --python-flag=no_asserts: 移除断言语句以减小体积
+          # 4. --disable-ccache: 禁用编译器缓存以确保最优化构建
+          
+          # 检查资源文件
+          $icon_path = "assets/icon/favicon.ico"
+          if (-not (Test-Path $icon_path)) {
+            Write-Warning "⚠️ 主图标文件不存在: $icon_path"
+          } else {
+            Write-Host "✅ 找到主图标文件: $icon_path"
+          }
+
+          if (-not (Test-Path "assets/icon")) {
+            Write-Error "❌ assets/icon目录不存在"
+            exit 1
+          } else {
+            Write-Host "✅ 找到assets/icon资源目录"
+            Write-Host "📁 assets/icon目录内容:"
+            Get-ChildItem -Recurse "assets/icon" | Format-Table Name, FullName -AutoSize
+          }
+
+          python -m nuitka --standalone `
+            --assume-yes-for-downloads `
+            --windows-console-mode=disable `
+            --windows-icon-from-ico=$icon_path `
+            --include-data-files=$icon_path=favicon.ico `
+            --include-data-dir=assets/icon=assets/icon `
+            --windows-uac-admin `
+            --remove-output `
+            --enable-plugin=pyside6 `
+            --lto=yes `
+            --jobs=$env:NUMBER_OF_PROCESSORS `
+            --output-filename=ACE-KILLER.exe `
+            --nofollow-import-to=tkinter,numpy,scipy,matplotlib,PIL.ImageTk `
+            --nofollow-import-to=PySide6.QtWebEngineWidgets `
+            --nofollow-import-to=PySide6.Qt3DCore `
+            --nofollow-import-to=PySide6.Qt3DRender `
+            --nofollow-import-to=PySide6.QtCharts `
+            --nofollow-import-to=PySide6.QtDataVisualization `
+            --nofollow-import-to=PySide6.QtMultimedia `
+            --nofollow-import-to=PySide6.QtPositioning `
+            --nofollow-import-to=PySide6.QtBluetooth `
+            --nofollow-import-to=PySide6.QtSerialPort `
+            --nofollow-import-to=PySide6.QtLocation `
+            --prefer-source-code `
+            --python-flag=no_site `
+            --python-flag=no_warnings `
+            --python-flag=no_docstrings `
+            --python-flag=no_asserts `
+            --disable-ccache `
+            --report=compilation-report.xml `
+            main.py
+        shell: pwsh
+        env:
+          PYTHONIOENCODING: utf-8
+          PYTHONLEGACYWINDOWSSTDIO: 1
+
+      - name: 验证构建结果
+        run: |
+          Write-Host "🔍 验证构建结果..."
+
+          # 检查关键文件
+          $checks = @(
+            @{ Path = "VERSION"; Name = "版本文件" },
+            @{ Path = "compilation-report.xml"; Name = "编译报告" },
+            @{ Path = "main.dist"; Name = "构建目录" },
+            @{ Path = "main.dist/ACE-KILLER.exe"; Name = "可执行文件" }
+          )
+
+          foreach ($check in $checks) {
+            if (Test-Path $check.Path) {
+              if ($check.Path -eq "main.dist/ACE-KILLER.exe") {
+                $fileInfo = Get-Item $check.Path
+                $fileSizeMB = [math]::Round($fileInfo.Length / 1MB, 2)
+                Write-Host "✅ $($check.Name) (大小: ${fileSizeMB} MB)"
+              } else {
+                Write-Host "✅ $($check.Name)"
+              }
+            } else {
+              Write-Error "❌ $($check.Name) 未找到: $($check.Path)"
+              if ($check.Path -eq "main.dist/ACE-KILLER.exe") { exit 1 }
+            }
+          }
+
+          Write-Host "🎉 构建验证完成！"
+        shell: pwsh
+
+      - name: 上传编译报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compilation-report-v${{ github.event.inputs.version }}
+          path: compilation-report.xml
+          retention-days: 30
+
+      - name: 压缩可执行文件目录
+        run: |
+          $dist_dir = "main.dist"
+          $zip_name = "ACE-KILLER-v${{ github.event.inputs.version }}-x64"
+          $zip_path = "$zip_name.zip"
+
+          if (Test-Path $dist_dir) {
+            Compress-Archive -Path "$dist_dir/*" -DestinationPath $zip_path -Force
+            if (Test-Path $zip_path) {
+              $size_mb = (Get-Item $zip_path).Length / 1MB
+              Write-Host "✅ 成功创建 $zip_path (大小: $([math]::Round($size_mb, 2)) MB)"
+            } else {
+              throw "压缩失败，未生成ZIP文件"
+            }
+          } else {
+            throw "构建目录不存在，构建可能失败"
+          }
+        shell: pwsh
+
+      - name: 创建发布
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.event.inputs.version }}
+          name: ACE-KILLER v${{ github.event.inputs.version }}
+          body: |
+            ### 🚀 更新日志
+            ${{ github.event.inputs.release_notes }}
+
+            ### 📥 安装说明
+            1. 下载 zip 压缩包文件
+            2. 解压到任意目录
+            3. 右键点击 `ACE-KILLER.exe`，选择"以管理员身份运行"
+
+            ### ⚠️ 系统要求
+            - Windows 10/11 x64
+            - 需要管理员权限
+
+            ### 🔍 如何检查更新
+            1. 打开程序主界面
+            2. 切换到"设置"选项卡
+            3. 点击"检查更新"按钮
+            4. 如有新版本会自动提示并可直接跳转下载
+            
+          # 添加覆盖选项
+          draft: false
+          prerelease: false
+          files: |
+            ACE-KILLER-v${{ github.event.inputs.version }}-x64.zip

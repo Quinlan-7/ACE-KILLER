@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ACE-KILLER v3.0</title>
+    <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="dark">
+    <div id="app">
+        <!-- Title Bar -->
+        <header id="titlebar">
+            <div class="titlebar-left">
+                <span class="logo">🛡️ ACE-KILLER</span>
+                <span class="version">v3.0</span>
+            </div>
+            <div class="titlebar-center">
+                <span id="status-badge" class="badge idle">待机</span>
+            </div>
+            <div class="titlebar-right">
+                <button onclick="window.__TAURI__.window.getCurrent().minimize()">─</button>
+                <button onclick="window.__TAURI__.window.getCurrent().close()">✕</button>
+            </div>
+        </header>
+
+        <!-- Tab Navigation -->
+        <nav id="tabs">
+            <button class="tab active" data-tab="status">状态</button>
+            <button class="tab" data-tab="processes">进程</button>
+            <button class="tab" data-tab="memory">内存</button>
+            <button class="tab" data-tab="ramdisk">RAM盘</button>
+            <button class="tab" data-tab="rules">规则</button>
+            <button class="tab" data-tab="profiles">预设</button>
+            <button class="tab" data-tab="settings">设置</button>
+        </nav>
+
+        <!-- Tab Content -->
+        <main id="content">
+            <!-- Status Tab -->
+            <section id="tab-status" class="tab-content active">
+                <div class="card">
+                    <h3>系统状态</h3>
+                    <div class="status-grid">
+                        <div class="stat">
+                            <span class="stat-label">监控状态</span>
+                            <span id="s-monitor" class="stat-value">-</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-label">内存使用</span>
+                            <span id="s-memory" class="stat-value">-</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-label">RAM盘</span>
+                            <span id="s-ramdisk" class="stat-value">-</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-label">进程数</span>
+                            <span id="s-processes" class="stat-value">-</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Processes Tab -->
+            <section id="tab-processes" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>进程列表</h3>
+                        <button onclick="refreshProcesses()" class="btn-sm">刷新</button>
+                    </div>
+                    <div class="search-bar">
+                        <input type="text" id="proc-search" placeholder="搜索进程..." oninput="filterProcesses()" />
+                    </div>
+                    <div id="process-list" class="process-list"></div>
+                </div>
+            </section>
+
+            <!-- Memory Tab -->
+            <section id="tab-memory" class="tab-content">
+                <div class="card">
+                    <h3>内存信息</h3>
+                    <div id="memory-info" class="memory-info"></div>
+                    <div class="btn-row">
+                        <button onclick="cleanMemory()" class="btn primary">立即清理</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- RAM Disk Tab -->
+            <section id="tab-ramdisk" class="tab-content">
+                <div class="card">
+                    <h3>RAM盘管理</h3>
+                    <div id="ramdisk-info" class="ramdisk-info"></div>
+                    <div class="btn-row">
+                        <button onclick="setupRamdisk()" class="btn primary">创建RAM盘</button>
+                        <button onclick="cleanupRamdisk()" class="btn danger">清理RAM盘</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Rules Tab -->
+            <section id="tab-rules" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>进程规则</h3>
+                        <button onclick="showAddRule()" class="btn-sm">+ 添加</button>
+                    </div>
+                    <div id="rules-list" class="rules-list"></div>
+                </div>
+            </section>
+
+            <!-- Profiles Tab -->
+            <section id="tab-profiles" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>场景预设</h3>
+                        <button onclick="showAddProfile()" class="btn-sm">+ 添加</button>
+                    </div>
+                    <div id="profiles-list" class="profiles-list"></div>
+                </div>
+            </section>
+
+            <!-- Settings Tab -->
+            <section id="tab-settings" class="tab-content">
+                <div class="card">
+                    <h3>设置</h3>
+                    <div class="settings-group">
+                        <label><input type="checkbox" id="set-notify" /> 启用通知</label>
+                        <label><input type="checkbox" id="set-wmi" /> WMI监控</label>
+                        <label><input type="checkbox" id="set-ramdisk-auto" /> 退出时清理RAM盘</label>
+                    </div>
+                    <div class="settings-group">
+                        <label>启动延迟: <input type="number" id="set-delay" min="0" max="300" /> 秒</label>
+                    </div>
+                    <div class="btn-row">
+                        <button onclick="saveSettings()" class="btn primary">保存设置</button>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+    <script src="main.js"></script>
+</body>
+</html>

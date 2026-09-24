@@ -1,0 +1,7 @@
+
+# temp files
+_*.json
+_*.py
+_*.txt
+check_*.py
+poll_*.py
