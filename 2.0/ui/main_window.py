@@ -103,6 +103,9 @@ class MainWindow(QWidget):
         
         # 初始应用圆角遮罩
         QTimer.singleShot(10, self.apply_rounded_mask)
+
+        # v2.2.3: 启动后自动创建 RAM 盘（开关已开启且未挂载时）
+        QTimer.singleShot(1500, self._auto_start_ramdisk)
     
     def paintEvent(self, event):
         """绘制圆角窗口背景"""
@@ -154,7 +157,7 @@ class MainWindow(QWidget):
         self.signal_bus.theme_changed.connect(self.switch_theme)
         self.signal_bus.tray_status_changed.connect(self._on_tray_status_changed)
 
-        self.setWindowTitle("ACE-KILLER v2.2.2")
+        self.setWindowTitle("ACE-KILLER v2.2.3")
         self.setMinimumSize(600, 780)
         
         # 设置无边框窗口
@@ -686,8 +689,9 @@ class MainWindow(QWidget):
         ramdisk_info = QLabel(
             "ACE 反作弊进程会产生大量磁盘写入，通过 RAM 盘重定向可以将临时文件\n"
             "映射到内存中，有效减少 SSD 写入磨损。\n\n"
-            "原理：使用 Windows subst 命令创建虚拟驱动器，并通过符号链接将\n"
-            "ACE 临时目录重定向到内存中。"
+            "原理：优先使用 ImDisk 创建真正的内存盘（未安装时回退到磁盘目录\n"
+            "重定向 + 符号链接，所有进程可见）。开关开启后，每次程序启动\n"
+            "会自动创建；建议安装 ImDisk 以获得真正的内存盘保护。"
         )
         ramdisk_info.setWordWrap(True)
         StyleHelper.set_label_type(ramdisk_info, "info")
@@ -1379,6 +1383,55 @@ class MainWindow(QWidget):
     
     # ============ RAM 盘操作方法 ============
 
+    def _auto_start_ramdisk(self):
+        """启动后自动创建 RAM 盘（v2.2.3）
+
+        当「启用 RAM 盘重定向」开关已开启且 RAM 盘尚未挂载时，
+        自动执行 setup_ramdisk()，无需手动点击「启动 RAM 盘」。
+        """
+        try:
+            if not self.monitor.config_manager.ramdisk_enabled:
+                logger.debug("RAM 盘开关未开启，跳过自动创建")
+                return
+
+            info = self.ramdisk_manager.get_ramdisk_info()
+            if info["exists"]:
+                logger.info("RAM 盘已挂载，跳过自动创建")
+                if hasattr(self, "ramdisk_status_label"):
+                    self.ramdisk_status_label.setText("RAM 盘状态: 运行中")
+                    StyleHelper.set_label_type(self.ramdisk_status_label, "success")
+                    self.ramdisk_stop_btn.setEnabled(True)
+                return
+
+            logger.info("检测到 RAM 盘开关已开启，自动创建 RAM 盘...")
+            if hasattr(self, "ramdisk_status_label"):
+                self.ramdisk_status_label.setText("RAM 盘状态: 自动启动中...")
+                StyleHelper.set_label_type(self.ramdisk_status_label, "info")
+
+            success = self.ramdisk_manager.setup_ramdisk()
+            if success:
+                if hasattr(self, "ramdisk_status_label"):
+                    self.ramdisk_status_label.setText("RAM 盘状态: 运行中")
+                    StyleHelper.set_label_type(self.ramdisk_status_label, "success")
+                    self.ramdisk_stop_btn.setEnabled(True)
+                    ram_info = self.ramdisk_manager.get_ramdisk_info()
+                    if ram_info["exists"]:
+                        self.ramdisk_info_label.setText(
+                            f"总空间: {ram_info['total_gb']} GB\n"
+                            f"已用: {ram_info['used_gb']} GB\n"
+                            f"可用: {ram_info['free_gb']} GB\n"
+                            f"已重定向: {ram_info['redirected_dirs']} 个目录"
+                        )
+                logger.success("启动自动创建 RAM 盘完成（含目录重定向）")
+            else:
+                if hasattr(self, "ramdisk_status_label"):
+                    self.ramdisk_status_label.setText("RAM 盘状态: 自动启动失败")
+                    StyleHelper.set_label_type(self.ramdisk_status_label, "error")
+                    self.ramdisk_info_label.setText("自动创建失败，可手动点击「启动 RAM 盘」重试")
+                logger.error("启动自动创建 RAM 盘失败")
+        except Exception as e:
+            logger.error(f"自动创建 RAM 盘异常: {e}")
+
     def toggle_ramdisk(self, state):
         """切换 RAM 盘重定向"""
         enabled = bool(state)
@@ -1761,7 +1814,7 @@ class MainWindow(QWidget):
         msg_box = QMessageBox(self)
         msg_box.setWindowTitle("关于 ACE-KILLER")
         msg_box.setText(
-            "ACE-KILLER v2.2.2\n\n"
+            "ACE-KILLER v2.2.3\n\n"
             "一款 ACE 反作弊进程资源管理 / 游戏优化工具\n\n"
             "主要功能：\n"
             "• ACE 弹窗监控与 SGuard64 扫盘进程优化\n"

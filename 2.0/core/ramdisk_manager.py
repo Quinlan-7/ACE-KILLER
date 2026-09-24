@@ -31,6 +31,7 @@ class RamdiskManager:
         self.ram_disk_letter = "R"
         self.redirected_count = 0
         self._imdisk_available = None  # 缓存检测结果
+        self.ram_root = None  # v2.2.3: 当前重定向根目录（ImDisk=盘符路径 / 回退=TEMP 物理目录）
 
         # ACE 临时目录列表
         self.ace_temp_paths = [
@@ -122,28 +123,27 @@ class RamdiskManager:
     def setup_ramdisk(self):
         """创建 RAM 盘并设置重定向
 
-        优先使用 ImDisk（真正的内存盘），
-        回退到 subst（虚拟目录映射）
+        优先使用 ImDisk（真正的内存盘，所有进程可见）；
+        未安装 ImDisk 时回退到物理目录重定向
+        （%TEMP%\\ACE_RAMDisk，普通进程同样可见）。
+
+        v2.2.3: 原 subst 虚拟盘仅在提升令牌命名空间可见，
+        普通权限的游戏进程无法访问，故改为物理目录重定向。
 
         Returns:
             bool: 是否成功
         """
         try:
-            ram_path = f"{self.ram_disk_letter}:\\"
-
-            if os.path.exists(ram_path):
-                logger.success(f"RAM 盘已存在: {ram_path}")
-            else:
-                # 优先使用 ImDisk
-                if self.detect_imdisk():
-                    if self.create_imdisk_ramdisk(2048, self.ram_disk_letter):
-                        logger.success("使用 ImDisk 真实内存盘")
-                    else:
-                        logger.warning("ImDisk 创建失败，使用 subst 回退方案")
-                        self._create_subst_ramdisk()
+            if self.detect_imdisk():
+                if self.create_imdisk_ramdisk(2048, self.ram_disk_letter):
+                    self.ram_root = f"{self.ram_disk_letter}:\\"
+                    logger.success("使用 ImDisk 真实内存盘（所有进程可见）")
                 else:
-                    logger.info("未检测到 ImDisk，使用 subst 虚拟驱动器")
-                    self._create_subst_ramdisk()
+                    logger.warning("ImDisk 创建失败，使用物理目录重定向")
+                    self._ensure_disk_redirect_root()
+            else:
+                logger.info("未检测到 ImDisk，使用物理目录重定向（建议安装 ImDisk 获得真内存盘）")
+                self._ensure_disk_redirect_root()
 
             self._setup_redirects()
             return True
@@ -152,16 +152,12 @@ class RamdiskManager:
             logger.error(f"RAM 盘创建失败: {e}")
             return False
 
-    def _create_subst_ramdisk(self):
-        """使用 subst 创建虚拟驱动器（回退方案）"""
-        ram_path = f"{self.ram_disk_letter}:\\"
+    def _ensure_disk_redirect_root(self):
+        """确保物理目录重定向根存在（v2.2.3 回退方案，跨令牌可见）"""
         temp_path = os.path.join(os.environ["TEMP"], "ACE_RAMDisk")
         os.makedirs(temp_path, exist_ok=True)
-        subprocess.run(
-            f"subst {self.ram_disk_letter}: \"{temp_path}\"",
-            shell=True, check=True, capture_output=True
-        )
-        logger.success(f"虚拟驱动器创建成功: {ram_path}")
+        self.ram_root = temp_path
+        logger.success(f"重定向根目录就绪: {temp_path}")
 
     def _setup_redirects(self):
         """设置 ACE 临时目录重定向到 RAM 盘"""
@@ -181,7 +177,8 @@ class RamdiskManager:
                     logger.info(f"已备份目录: {temp_path}")
 
                 ram_target = os.path.join(
-                    f"{self.ram_disk_letter}:\\ACE_Temp",
+                    self.ram_root or os.path.join(os.environ["TEMP"], "ACE_RAMDisk"),
+                    "ACE_Temp",
                     os.path.basename(temp_path)
                 )
                 os.makedirs(ram_target, exist_ok=True)
@@ -211,13 +208,8 @@ class RamdiskManager:
             bool: 是否成功
         """
         try:
-            # 移除 subst 虚拟驱动器
-            subprocess.run(
-                f"subst {self.ram_disk_letter}: /D",
-                shell=True, check=False, capture_output=True
-            )
-
-            # v2.2: 若 RAM 盘卷标为 ACE_RAMDISK（自建 ImDisk 盘），删除之
+            # v2.2.3: 回退模式下无 subst 盘符；若当前根为物理目录且此前以 ImDisk 挂载则处理 ImDisk
+            # 若 RAM 盘卷标为 ACE_RAMDISK（自建 ImDisk 盘），删除之
             try:
                 result = subprocess.run(
                     f"vol {self.ram_disk_letter}:",
@@ -248,6 +240,20 @@ class RamdiskManager:
                 except Exception:
                     continue
 
+            # v2.2.3: 清理物理重定向根下的 ACE_Temp 内容（保留根目录）
+            try:
+                ace_tmp = os.path.join(
+                    self.ram_root or os.path.join(os.environ["TEMP"], "ACE_RAMDisk"),
+                    "ACE_Temp",
+                )
+                if os.path.isdir(ace_tmp):
+                    import shutil
+                    shutil.rmtree(ace_tmp, ignore_errors=True)
+            except Exception:
+                pass
+
+            self.ram_root = None
+            self.redirected_count = 0
             logger.success("RAM 盘已清理")
             return True
 
@@ -288,7 +294,7 @@ class RamdiskManager:
             "redirected_dirs": self.redirected_count,
         }
 
-        ram_path = f"{self.ram_disk_letter}:\\"
+        ram_path = self.ram_root or f"{self.ram_disk_letter}:\\"
         if os.path.exists(ram_path):
             info["exists"] = True
             try:
@@ -317,3 +323,14 @@ class RamdiskManager:
                 pass
 
         return info
+
+    def is_ready(self) -> bool:
+        """当前 RAM 盘是否已挂载就绪（v2.2.3）
+
+        Returns:
+            bool: 重定向根存在即为就绪
+        """
+        try:
+            return self.get_ramdisk_info()["exists"]
+        except Exception:
+            return False

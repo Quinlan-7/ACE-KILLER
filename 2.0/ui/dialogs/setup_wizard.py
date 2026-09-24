@@ -24,7 +24,7 @@ class SetupWizard(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.config = ConfigManager()
-        self.setWindowTitle("ACE-KILLER v2.2.2 - 首次设置")
+        self.setWindowTitle("ACE-KILLER v2.2.3 - 首次设置")
         self.setMinimumSize(550, 400)
         self.setModal(True)
         self.setup_ui()
@@ -33,7 +33,7 @@ class SetupWizard(QDialog):
         layout = QVBoxLayout(self)
 
         # 标题
-        title = QLabel("欢迎使用 ACE-KILLER v2.2.2")
+        title = QLabel("欢迎使用 ACE-KILLER v2.2.3")
         title_font = QFont()
         title_font.setPointSize(16)
         title_font.setBold(True)
