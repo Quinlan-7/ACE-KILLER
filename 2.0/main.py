@@ -78,7 +78,7 @@ def main():
     get_disk_stats().start_monitoring()
     
     # 现在日志系统已初始化，可以记录启动信息
-    logger.debug("🟩 ACE-KILLER v2.2 程序已启动！")
+    logger.debug("🟩 ACE-KILLER v2.2.2 程序已启动！")
     
     # 查找图标文件
     icon_path = find_icon_path()

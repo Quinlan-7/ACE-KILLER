@@ -111,6 +111,18 @@ def _task_name(app_name: str = "ACE-KILLER") -> str:
     return f"{app_name}-AutoStart"
 
 
+def _run_schtasks(cmd: str) -> "subprocess.CompletedProcess":
+    """执行 schtasks 并安全解码输出（v2.2.1: 修复 GBK 输出导致解码崩溃）"""
+    raw = subprocess.run(
+        cmd, shell=True, capture_output=True,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    # 用 bytes 捕获，手动解码（errors=replace 兜底，任意编码都不崩溃）
+    stdout = raw.stdout.decode("utf-8", errors="replace") if raw.stdout else ""
+    stderr = raw.stderr.decode("utf-8", errors="replace") if raw.stderr else ""
+    return type("CP", (), {"returncode": raw.returncode, "stdout": stdout, "stderr": stderr})
+
+
 def enable_task(app_name: str = "ACE-KILLER", delay_seconds: int = 0) -> bool:
     """创建计划任务：登录时以最高权限启动"""
     try:
@@ -121,10 +133,7 @@ def enable_task(app_name: str = "ACE-KILLER", delay_seconds: int = 0) -> bool:
             f'schtasks /create /tn "{_task_name(app_name)}" /tr "{quoted}" '
             f'/sc onlogon /rl highest /f'
         )
-        result = subprocess.run(
-            cmd, shell=True, capture_output=True, text=True,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        )
+        result = _run_schtasks(cmd)
         if result.returncode == 0:
             logger.debug(f"已创建计划任务 {_task_name(app_name)}")
             return True
@@ -139,10 +148,7 @@ def disable_task(app_name: str = "ACE-KILLER") -> bool:
     """删除计划任务"""
     try:
         cmd = f'schtasks /delete /tn "{_task_name(app_name)}" /f'
-        result = subprocess.run(
-            cmd, shell=True, capture_output=True, text=True,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        )
+        result = _run_schtasks(cmd)
         if result.returncode == 0:
             logger.debug(f"已删除计划任务 {_task_name(app_name)}")
             return True
@@ -161,10 +167,7 @@ def check_task(app_name: str = "ACE-KILLER") -> bool:
     """检查计划任务是否存在"""
     try:
         cmd = f'schtasks /query /tn "{_task_name(app_name)}"'
-        result = subprocess.run(
-            cmd, shell=True, capture_output=True, text=True,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        )
+        result = _run_schtasks(cmd)
         return result.returncode == 0
     except Exception as e:
         logger.error(f"查询计划任务失败: {e}")

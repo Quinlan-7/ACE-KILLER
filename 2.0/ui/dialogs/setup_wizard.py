@@ -24,7 +24,7 @@ class SetupWizard(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.config = ConfigManager()
-        self.setWindowTitle("ACE-KILLER v2.2 - 首次设置")
+        self.setWindowTitle("ACE-KILLER v2.2.2 - 首次设置")
         self.setMinimumSize(550, 400)
         self.setModal(True)
         self.setup_ui()
@@ -33,7 +33,7 @@ class SetupWizard(QDialog):
         layout = QVBoxLayout(self)
 
         # 标题
-        title = QLabel("欢迎使用 ACE-KILLER v2.2")
+        title = QLabel("欢迎使用 ACE-KILLER v2.2.2")
         title_font = QFont()
         title_font.setPointSize(16)
         title_font.setBold(True)
@@ -173,6 +173,7 @@ class SetupWizard(QDialog):
             self.config.use_wmi = self.wmi_check.isChecked()
             self.config.ramdisk_enabled = self.ramdisk_check.isChecked()
             self.config.first_run = False
+            self.config.wizard_done = True  # v2.2.1: 标记向导完成，避免下次启动重复弹出
             self.config.save_config()
             logger.success("首次设置已保存")
         except Exception as e:

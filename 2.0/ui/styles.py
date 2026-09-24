@@ -151,7 +151,7 @@ class ThemeManager(QObject):
     
     def __init__(self):
         super().__init__()
-        self._current_theme = "light"
+        self._current_theme = "dark"
         self._light_stylesheet = None
         self._dark_stylesheet = None
         self._generate_stylesheets()

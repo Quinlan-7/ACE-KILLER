@@ -36,7 +36,7 @@ class ConfigManager:
         self.log_retention_days = 7  # 默认日志保留天数
         self.log_rotation = "1 day"  # 默认日志轮转周期
         self.debug_mode = False  # 调试模式默认值
-        self.theme = "light"  # 主题设置默认值（light/dark）
+        self.theme = "dark"  # 主题设置默认值（light/dark）
         self.memory_cleaner_enabled = False  # 内存清理开关默认值
         self.memory_cleaner_brute_mode = True  # 内存清理暴力模式默认值
         self.memory_cleaner_switches = [False] * 6  # 内存清理选项默认值
@@ -46,8 +46,9 @@ class ConfigManager:
         self.io_priority_processes = []
         self.ramdisk_enabled = False
         self.ramdisk_auto_cleanup = True
-        self.kill_ace_tray = True  # v2.2: 自动关闭 ACE-Tray.exe 弹窗
+        self.kill_ace_tray = False  # v2.2.2: 默认不终止 ACE-Tray，仅效能优化（避免游戏安全组件报错）
         self.game_mode_active = False  # v2.2: 游戏模式激活状态（持久化）
+        self.wizard_done = False  # v2.2.1: 首次运行向导是否已完成
         self.rules = []  # v2.0: 进程规则列表
         self.profiles = []  # v2.0: 场景预设列表
         self.first_run = True  # v2.0: 首次运行标记
@@ -89,10 +90,10 @@ class ConfigManager:
             "logging": {"retention_days": 7, "rotation": "1 day", "debug_mode": False},
             "application": {
                 "auto_start": True, "auto_start_force": True,
-                "close_to_tray": True, "theme": "light",
-                "startup_delay": 30,
+                "close_to_tray": True, "theme": "dark",
+                "startup_delay": 30, "wizard_done": False,  # v2.2.1: 首次向导完成标记
             },
-            "monitor": {"enabled": False, "use_wmi": True, "kill_ace_tray": True},
+            "monitor": {"enabled": False, "use_wmi": True, "kill_ace_tray": False},
             "memory_cleaner": {
                 "enabled": False,
                 "brute_mode": True,
@@ -102,7 +103,7 @@ class ConfigManager:
                 "cooldown": 60,
             },
             "io_priority": {
-                "processes": [{"name": "SGuard64.exe", "priority": 0}, {"name": "ACE-Tray.exe", "priority": 0}]
+                "processes": [{"name": "SGuard64.exe", "priority": 0}]
             },
             "ramdisk": {
                 "enabled": False,
@@ -185,6 +186,11 @@ class ConfigManager:
                     self.startup_delay = int(config_data["application"]["startup_delay"])
                     logger.debug(f"已从配置文件加载启动延迟: {self.startup_delay}s")
 
+                # 读取首次向导完成标记 (v2.2.1)
+                if "application" in config_data:
+                    self.wizard_done = bool(config_data["application"].get("wizard_done", False))
+                    logger.debug(f"已从配置文件加载向导完成标记: {self.wizard_done}")
+
                 # 读取 WMI 模式
                 if "monitor" in config_data and "use_wmi" in config_data["monitor"]:
                     self.use_wmi = bool(config_data["monitor"]["use_wmi"])
@@ -197,7 +203,7 @@ class ConfigManager:
                         logger.debug(f"已从配置文件加载主题设置: {self.theme}")
                     else:
                         logger.warning(f"配置文件中的主题值无效: {theme_value}，使用默认值: light")
-                        self.theme = "light"
+                        self.theme = "dark"
 
                 # 读取监控设置
                 if "monitor" in config_data and "enabled" in config_data["monitor"]:
@@ -266,8 +272,8 @@ class ConfigManager:
                 if "profiles" in config_data and isinstance(config_data["profiles"], list):
                     self.profiles = config_data["profiles"]
 
-                # 首次运行检测
-                if self.config_version < self.CONFIG_VERSION or not config_data.get("rules"):
+                # 首次运行检测（v2.2.1: 依据向导完成标记，不再因 rules 为空而反复弹出）
+                if self.config_version < self.CONFIG_VERSION or not self.wizard_done:
                     self.first_run = True
                 else:
                     self.first_run = False
@@ -306,8 +312,9 @@ class ConfigManager:
             self.auto_start_force = default_config["application"].get("auto_start_force", True)
             self.close_to_tray = default_config["application"]["close_to_tray"]
             self.theme = default_config["application"]["theme"]
+            self.wizard_done = default_config["application"].get("wizard_done", False)
             self.monitor_enabled = default_config["monitor"]["enabled"]
-            self.kill_ace_tray = default_config["monitor"].get("kill_ace_tray", True)
+            self.kill_ace_tray = default_config["monitor"].get("kill_ace_tray", False)
 
             # 加载内存清理默认设置
             if "memory_cleaner" in default_config:
@@ -385,9 +392,12 @@ class ConfigManager:
                 if "application" in config_data:
                     if "auto_start_force" not in config_data["application"]:
                         config_data["application"]["auto_start_force"] = True
+                    # 老用户升级视为已完成首次向导，不再重复弹出 (v2.2.1)
+                    if "wizard_done" not in config_data["application"]:
+                        config_data["application"]["wizard_done"] = True
                 if "monitor" in config_data:
                     if "kill_ace_tray" not in config_data["monitor"]:
-                        config_data["monitor"]["kill_ace_tray"] = True
+                        config_data["monitor"]["kill_ace_tray"] = False
                 if "game_mode" not in config_data:
                     config_data["game_mode"] = {"active": False}
 
@@ -423,6 +433,7 @@ class ConfigManager:
                     "close_to_tray": self.close_to_tray,
                     "theme": self.theme,
                     "startup_delay": self.startup_delay,
+                    "wizard_done": self.wizard_done,  # v2.2.1
                 },
                 "monitor": {
                     "enabled": self.monitor_enabled,

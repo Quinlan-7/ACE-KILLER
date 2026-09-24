@@ -10,9 +10,14 @@ from PySide6.QtCore import QObject, Signal
 
 
 class SignalBus(QObject):
-    """全局信号总线 - 单例"""
+    """全局信号总线 - 单例
 
-    _instance = None
+    v2.2.1: 移除 __new__ 单例实现。
+    原实现中第二次调用 SignalBus() 时，Python 会对 __new__ 返回的
+    已有实例再次调用 QObject.__init__，触发 shiboken
+    "You can't initialize a QObject object twice" 崩溃（源码/打包环境均复现）。
+    改用模块级实例 + 工厂函数持有，构造只发生一次。
+    """
 
     # 进程相关信号
     process_limited = Signal(str)  # "pid:name:method"
@@ -43,12 +48,14 @@ class SignalBus(QObject):
     # 配置变更信号
     config_changed = Signal(str)  # section_name
 
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
+
+# v2.2.1: 模块级单例实例（由 get_signal_bus 工厂持有）
+_instance = None
 
 
 def get_signal_bus() -> SignalBus:
-    """获取信号总线单例"""
-    return SignalBus()
+    """获取信号总线单例（只构造一次，返回同一实例）"""
+    global _instance
+    if _instance is None:
+        _instance = SignalBus()
+    return _instance

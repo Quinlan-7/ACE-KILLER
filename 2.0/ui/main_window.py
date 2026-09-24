@@ -24,15 +24,12 @@ from utils.version_checker import get_version_checker, get_current_version, crea
 from utils.notification import send_notification
 from core.system_utils import enable_auto_start, disable_auto_start
 from core.ramdisk_manager import RamdiskManager  # v2.2: 修复 v2.1 缺失导入导致的启动崩溃
-from core.game_mode import GameModeManager  # v2.2: 一键游戏模式
-from core.cpu_topology import get_cpu_summary, get_eco_target_cpus  # v2.2: CPU 拓扑信息
+from core.cpu_topology import get_cpu_summary  # v2.2: CPU 拓扑信息
 from core.hardware_info import get_gpu_summary, get_memory_info  # v2.2: 显卡/内存信息
 from utils.memory_cleaner import get_memory_cleaner
 from utils.process_io_priority import get_io_priority_manager, IO_PRIORITY_HINT
 from ui.process_io_priority_manager import show_process_io_priority_manager
 from ui.components.custom_titlebar import CustomTitleBar
-from ui.tabs.rules_tab import RulesTab
-from ui.tabs.profiles_tab import ProfilesTab
 from ui.signal_bus import get_signal_bus
 from ui.styles import (
     ColorScheme, StyleHelper, theme_manager, StatusHTMLGenerator, StyleApplier,
@@ -72,8 +69,6 @@ class MainWindow(QWidget):
         # 初始化 RAM 盘管理器
         self.ramdisk_manager = RamdiskManager()
 
-        # v2.2: 初始化游戏模式管理器
-        self.game_mode_manager = GameModeManager(monitor.config_manager)
         
         # 初始化版本检查器
         self.version_checker = get_version_checker()
@@ -159,7 +154,7 @@ class MainWindow(QWidget):
         self.signal_bus.theme_changed.connect(self.switch_theme)
         self.signal_bus.tray_status_changed.connect(self._on_tray_status_changed)
 
-        self.setWindowTitle("ACE-KILLER v2.2")
+        self.setWindowTitle("ACE-KILLER v2.2.2")
         self.setMinimumSize(600, 780)
         
         # 设置无边框窗口
@@ -298,60 +293,6 @@ class MainWindow(QWidget):
         
         io_priority_group.setLayout(io_priority_layout)
         process_layout.addWidget(io_priority_group)
-
-        # ============ 游戏模式选项卡 (v2.2) ============
-        game_tab = QWidget()
-        game_layout = QVBoxLayout(game_tab)
-
-        # 游戏模式设置组
-        game_group = QGroupBox("🎮 一键游戏模式")
-        game_box = QVBoxLayout()
-
-        game_info = QLabel(
-            "一键进入游戏模式，自动完成以下优化（全部可一键还原）：\n"
-            "• 电源方案切换：优先启用「卓越性能」，否则「高性能」\n"
-            "• 关闭 GameDVR 后台录制，减少磁盘与性能开销\n"
-            "• 清理一次系统内存，释放可用空间\n"
-            "• 将 ACE 反作弊相关进程切换为效能模式（低优先级 + 效能核绑定）\n\n"
-            "适用于 AMD / Intel 平台，退出游戏模式自动恢复原设置。"
-        )
-        game_info.setWordWrap(True)
-        StyleHelper.set_label_type(game_info, "info")
-        game_box.addWidget(game_info)
-
-        self.game_mode_status_label = QLabel("游戏模式：未激活")
-        StyleHelper.set_label_type(self.game_mode_status_label, "warn")
-        game_box.addWidget(self.game_mode_status_label)
-
-        game_btn_layout = QHBoxLayout()
-        self.game_mode_enter_btn = QPushButton("🎮 启用游戏模式")
-        self.game_mode_enter_btn.setToolTip("一键应用全部游戏优化（电源方案 / GameDVR / 内存清理 / ACE进程优化）")
-        self.game_mode_enter_btn.clicked.connect(self.enter_game_mode)
-        game_btn_layout.addWidget(self.game_mode_enter_btn)
-
-        self.game_mode_exit_btn = QPushButton("↩️ 退出游戏模式")
-        self.game_mode_exit_btn.setToolTip("恢复原电源方案与 GameDVR 设置")
-        self.game_mode_exit_btn.clicked.connect(self.exit_game_mode)
-        self.game_mode_exit_btn.setEnabled(False)
-        game_btn_layout.addWidget(self.game_mode_exit_btn)
-
-        game_btn_layout.addStretch()
-        game_box.addLayout(game_btn_layout)
-
-        game_group.setLayout(game_box)
-        game_layout.addWidget(game_group)
-
-        # 硬件信息组 (v2.2: AMD/Intel 平台兼容信息)
-        hw_group = QGroupBox("💻 硬件信息")
-        hw_box = QVBoxLayout()
-        self.hw_info_label = QLabel("加载中...")
-        self.hw_info_label.setWordWrap(True)
-        StyleHelper.set_label_type(self.hw_info_label, "info")
-        hw_box.addWidget(self.hw_info_label)
-        hw_group.setLayout(hw_box)
-        game_layout.addWidget(hw_group)
-
-        game_layout.addStretch()
 
         # 内存清理选项卡
         memory_tab = QWidget()
@@ -815,18 +756,11 @@ class MainWindow(QWidget):
 
         ramdisk_layout.addStretch()
 
-        # v2.0: 规则和预设标签页
-        rules_tab = RulesTab()
-        profiles_tab = ProfilesTab()
-
         # 添加选项卡
         self.tabs.addTab(status_tab, "  程序状态  ")
         self.tabs.addTab(process_tab, "  进程监控  ")
-        self.tabs.addTab(game_tab, "  游戏模式  ")
         self.tabs.addTab(memory_tab, "  内存清理  ")
         self.tabs.addTab(ramdisk_tab, "  RAM 盘  ")
-        self.tabs.addTab(rules_tab, "  进程规则  ")
-        self.tabs.addTab(profiles_tab, "  场景预设  ")
         self.tabs.addTab(settings_tab, "  设置  ")
     
     def setup_tray(self):
@@ -909,11 +843,6 @@ class MainWindow(QWidget):
         
         tray_menu.addSeparator()
         
-        # v2.2: 游戏模式菜单项
-        self.game_mode_action = QAction("🎮 切换游戏模式", self)
-        self.game_mode_action.setCheckable(True)
-        self.game_mode_action.triggered.connect(self.toggle_game_mode_from_tray)
-        tray_menu.addAction(self.game_mode_action)
 
         # 打开配置目录动作
         config_dir_action = QAction("打开配置目录", self)
@@ -1037,11 +966,6 @@ class MainWindow(QWidget):
             if hasattr(self, 'ramdisk_stop_btn'):
                 StyleHelper.set_button_type(self.ramdisk_stop_btn, "danger")
 
-            # 游戏模式按钮 (v2.2)
-            if hasattr(self, 'game_mode_enter_btn'):
-                StyleHelper.set_button_type(self.game_mode_enter_btn, "success")
-            if hasattr(self, 'game_mode_exit_btn'):
-                StyleHelper.set_button_type(self.game_mode_exit_btn, "warning")
 
             # 服务管理按钮
             if hasattr(self, 'start_ace_btn'):
@@ -1241,14 +1165,9 @@ class MainWindow(QWidget):
         
         html.append('</div>')
         
-        # v2.2: 游戏模式与硬件信息卡片
+        # 硬件信息卡片
         html.append('<div class="card">')
-        html.append('<div class="section-title">游戏模式 / 硬件信息</div>')
-        
-        if GameModeManager.is_active(self.monitor.config_manager):
-            html.append('<p class="status-item">🎮 游戏模式: <span class="status-success">已激活</span></p>')
-        else:
-            html.append('<p class="status-item">🎮 游戏模式: <span class="status-disabled">未激活</span></p>')
+        html.append('<div class="section-title">硬件信息</div>')
         
         try:
             cpu = get_cpu_summary()
@@ -1361,10 +1280,6 @@ class MainWindow(QWidget):
         self.clean_option4.setChecked(self.memory_cleaner.clean_switches[3])
         self.clean_option5.setChecked(self.memory_cleaner.clean_switches[4])
         self.clean_option6.setChecked(self.memory_cleaner.clean_switches[5])
-
-        # v2.2: 游戏模式状态与硬件信息
-        self._update_game_mode_status()
-        self._update_hw_info()
 
         self.update_status()
         self.blockSignals(False)
@@ -1632,93 +1547,6 @@ class MainWindow(QWidget):
             logger.debug(f"ACE-Tray 自动终止设置已更改并保存: {enabled}")
         self.update_status()
 
-    # ============ 游戏模式 (v2.2) ============
-
-    def _update_game_mode_status(self):
-        """更新游戏模式状态显示"""
-        active = GameModeManager.is_active(self.monitor.config_manager)
-        if active:
-            self.game_mode_status_label.setText("游戏模式：已激活 ✅")
-            StyleHelper.set_label_type(self.game_mode_status_label, "success")
-            self.game_mode_enter_btn.setEnabled(False)
-            self.game_mode_exit_btn.setEnabled(True)
-            if hasattr(self, "game_mode_action"):
-                self.game_mode_action.setChecked(True)
-        else:
-            self.game_mode_status_label.setText("游戏模式：未激活")
-            StyleHelper.set_label_type(self.game_mode_status_label, "warn")
-            self.game_mode_enter_btn.setEnabled(True)
-            self.game_mode_exit_btn.setEnabled(False)
-            if hasattr(self, "game_mode_action"):
-                self.game_mode_action.setChecked(False)
-
-    def _update_hw_info(self):
-        """更新硬件信息显示（v2.2）"""
-        try:
-            cpu = get_cpu_summary()
-            gpu = get_gpu_summary()
-            mem = get_memory_info()
-            eco = get_eco_target_cpus()
-            cpu_name = cpu.get("brand") or "未知处理器"
-            lines = [
-                f"🖥️ CPU：{cpu_name}",
-                f"&nbsp;&nbsp;厂商：{cpu.get('vendor', '未知')} | "
-                f"物理核心：{cpu.get('physical_cores', 0)} | "
-                f"逻辑处理器：{cpu.get('logical_processors', 0)}",
-                f"&nbsp;&nbsp;效能核心（后台进程绑定）：{eco if eco else '无'}",
-            ]
-            gpu_lines = []
-            for g in gpu.get("gpus", []):
-                gpu_lines.append(f"{g['vendor']} · {g['name']}")
-            lines.append(f"🖥️ 显卡：{'；'.join(gpu_lines) if gpu_lines else '未检测到'}")
-            if gpu.get("has_amd"):
-                lines.append("✅ 检测到 AMD 显卡，已启用平台兼容优化")
-            lines.append(
-                f"🧠 内存：总计 {mem.get('total_gb', 0):.1f} GB | "
-                f"可用 {mem.get('available_gb', 0):.1f} GB | "
-                f"占用 {mem.get('usage_percent', 0)}%"
-            )
-            if cpu.get("is_amd"):
-                lines.append("✅ AMD CPU：效能核心绑定已启用（最后一个物理核心）")
-            self.hw_info_label.setText("<br>".join(lines))
-        except Exception as e:
-            logger.debug(f"硬件信息获取失败: {e}")
-            self.hw_info_label.setText(f"硬件信息获取失败: {e}")
-
-    @Slot()
-    def enter_game_mode(self):
-        """进入游戏模式（v2.2）"""
-        ok, msg = self.game_mode_manager.enter_game_mode()
-        self._update_game_mode_status()
-        self.update_status()
-        if ok:
-            send_notification(
-                title="ACE-KILLER",
-                message="游戏模式已启用",
-                icon_path=self.icon_path
-            ) if self.monitor.config_manager.show_notifications else None
-        QMessageBox.information(
-            self,
-            "游戏模式",
-            ("✅ 游戏模式已启用\n\n" if ok else "⚠️ 部分步骤未完成\n\n") + msg,
-        )
-
-    @Slot()
-    def exit_game_mode(self):
-        """退出游戏模式（v2.2）"""
-        ok, msg = self.game_mode_manager.exit_game_mode()
-        self._update_game_mode_status()
-        self.update_status()
-        QMessageBox.information(self, "退出游戏模式", msg)
-
-    @Slot()
-    def toggle_game_mode_from_tray(self):
-        """从托盘菜单切换游戏模式"""
-        if GameModeManager.is_active(self.monitor.config_manager):
-            self.exit_game_mode()
-        else:
-            self.enter_game_mode()
-
     @Slot()
     def open_project_page(self):
         """打开项目主页"""
@@ -1933,13 +1761,12 @@ class MainWindow(QWidget):
         msg_box = QMessageBox(self)
         msg_box.setWindowTitle("关于 ACE-KILLER")
         msg_box.setText(
-            "ACE-KILLER v2.2\n\n"
+            "ACE-KILLER v2.2.2\n\n"
             "一款 ACE 反作弊进程资源管理 / 游戏优化工具\n\n"
             "主要功能：\n"
             "• ACE 弹窗监控与 SGuard64 扫盘进程优化\n"
             "• RAM 盘重定向，减少 SSD 写入磨损\n"
             "• 内存清理 / 进程优先级管理\n"
-            "• 一键游戏模式（AMD/Intel 平台兼容）\n"
             "• 强制开机自启动\n\n"
             "开源项目主页：github.com/" + GITHUB_REPO + "\n\n"
             "是否访问项目主页？"
@@ -2065,14 +1892,6 @@ class MainWindow(QWidget):
                 self.ramdisk_manager.cleanup_ramdisk()
             except Exception:
                 pass
-
-        # v2.2: 退出时若游戏模式仍激活，自动恢复原设置
-        try:
-            if GameModeManager.is_active(self.monitor.config_manager):
-                self.game_mode_manager.exit_game_mode()
-                logger.info("退出时已自动恢复游戏模式设置")
-        except Exception as e:
-            logger.error(f"退出时恢复游戏模式失败: {e}")
 
         # 退出应用
         QApplication.quit()

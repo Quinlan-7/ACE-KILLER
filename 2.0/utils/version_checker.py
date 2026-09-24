@@ -14,7 +14,7 @@ from PySide6.QtCore import QObject, Signal
 from utils.logger import logger
 
 # 版本信息 - 通过 GitHub Actions 构建时会被替换
-__version__ = "2.2.0"  # 默认版本号，构建时会被替换
+__version__ = "2.2.2"  # 默认版本号，构建时会被替换
 
 # v2.2: 更新检查仓库可配置（默认指向本项目维护仓库，可通过环境变量覆盖）
 GITHUB_REPO = os.environ.get("ACE_KILLER_REPO", "Quinlan-7/ACE-KILLER")

@@ -19,8 +19,6 @@ import ctypes
 from ctypes import wintypes
 import win32service
 
-from core.rule_engine import RuleEngine, get_rule_engine
-from core.profile_manager import ProfileManager, get_profile_manager
 from core.disk_stats import DiskStatsCollector, get_disk_stats
 from core.cpu_topology import get_eco_target_cpus
 from core.win32_constants import (
@@ -67,16 +65,11 @@ class GameProcessMonitor:
         self.message_queue = queue.Queue()  # 消息队列，用于在线程间传递状态信息
 
         # v2.0: 规则引擎和 Profile
-        self.rule_engine = get_rule_engine()
-        self.profile_manager = get_profile_manager()
         self.disk_stats = get_disk_stats()
 
         # v2.0: WMI 监控
         self.wmi_monitor = None
         self.use_wmi = getattr(config_manager, "use_wmi", False)
-
-        # v2.0: 规则应用追踪
-        self.rule_applied_pids = {}  # pid -> list of rule names
 
         # 设置自身进程优先级
         self._set_self_priority()
@@ -502,7 +495,7 @@ class GameProcessMonitor:
         专门监控并终止ACE-Tray.exe进程（可通过配置关闭自动终止）
         """
         # v2.2: 允许用户关闭自动终止 ACE-Tray
-        kill_enabled = getattr(self.config_manager, "kill_ace_tray", True)
+        kill_enabled = getattr(self.config_manager, "kill_ace_tray", False)
         if not kill_enabled:
             logger.debug("已根据配置关闭 ACE-Tray.exe 自动终止")
             # 仍然维持监控线程存在，避免状态误判，但只做资源优化而非终止
@@ -626,18 +619,6 @@ class GameProcessMonitor:
     def _on_wmi_process_created(self, process_name: str, pid: int):
         """WMI 进程创建回调 - 自动应用规则"""
         try:
-            # 应用规则引擎
-            applied = self.rule_engine.apply_rules(pid, process_name)
-            if applied:
-                self.rule_applied_pids[pid] = applied
-                logger.info(f"WMI 规则自动应用: {process_name} (PID:{pid}): {applied}")
-
-            # 检查 Profile 触发器
-            profile_name = self.profile_manager.check_trigger(process_name)
-            if profile_name:
-                self.profile_manager.activate_profile(profile_name)
-                logger.info(f"Profile 自动激活: {profile_name} (触发: {process_name})")
-
             # 添加磁盘监控
             self.disk_stats.add_watch_name(process_name)
 
@@ -678,13 +659,6 @@ class GameProcessMonitor:
 
         # v2.0: 停止磁盘 IO 统计
         self.disk_stats.stop_monitoring()
-
-        # v2.0: 停用 Profile
-        if self.profile_manager.active_profile:
-            try:
-                self.profile_manager.deactivate_profile()
-            except Exception:
-                pass
 
         # 重置状态
         self.anticheat_killed = False
