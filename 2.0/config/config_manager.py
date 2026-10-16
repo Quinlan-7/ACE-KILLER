@@ -14,7 +14,7 @@ from core.system_utils import check_auto_start, enable_auto_start, disable_auto_
 class ConfigManager:
     """配置管理类"""
 
-    CONFIG_VERSION = 3
+    CONFIG_VERSION = 4
 
     def __init__(self):
         """初始化配置管理器"""
@@ -30,23 +30,24 @@ class ConfigManager:
         self.auto_start = True  # 开机自启动开关默认值（v2.2 默认开启）
         self.auto_start_force = True  # 强制开机自启：计划任务最高权限 + 启动快捷方式
         self.startup_delay = 30  # 开机延迟启动秒数
-        self.monitor_enabled = True  # ACE弹窗监控开关默认值
+        self.monitor_enabled = True  # SGuard64 效能监控（v2.3.0 固定启用，不再提供弹窗拦截）
         self.use_wmi = True  # WMI 模式开关
         self.close_to_tray = True  # 关闭窗口时最小化到后台（True）还是直接退出（False），默认最小化到后台
         self.log_retention_days = 7  # 默认日志保留天数
         self.log_rotation = "1 day"  # 默认日志轮转周期
-        self.debug_mode = False  # 调试模式默认值
         self.theme = "dark"  # 主题设置默认值（light/dark）
-        self.memory_cleaner_enabled = False  # 内存清理开关默认值
-        self.memory_cleaner_brute_mode = True  # 内存清理暴力模式默认值
-        self.memory_cleaner_switches = [False] * 6  # 内存清理选项默认值
-        self.memory_cleaner_interval = 300  # 内存清理间隔默认值(秒)
-        self.memory_cleaner_threshold = 80.0  # 内存占用触发阈值默认值(百分比)
-        self.memory_cleaner_cooldown = 60  # 内存清理冷却时间默认值(秒)
+        # v2.3.0: 内存清理固定启用，采用温和策略（定时工作集 + 阈值触发工作集），不做暴力清理避免卡顿
+        self.memory_cleaner_enabled = True
+        self.memory_cleaner_brute_mode = False
+        self.memory_cleaner_switches = [True, False, False, False, True, False]
+        self.memory_cleaner_interval = 600  # 10 分钟，降低 CPU 占用
+        self.memory_cleaner_threshold = 85.0
+        self.memory_cleaner_cooldown = 60
         self.io_priority_processes = []
-        self.ramdisk_enabled = False
+        # v2.3.0: RAM 盘重定向固定启用，启动时自动挂载
+        self.ramdisk_enabled = True
         self.ramdisk_auto_cleanup = True
-        self.kill_ace_tray = False  # v2.2.2: 默认不终止 ACE-Tray，仅效能优化（避免游戏安全组件报错）
+        self.kill_ace_tray = False  # v2.3.0: 弹窗拦截功能已移除，保留字段仅为兼容老配置
         self.game_mode_active = False  # v2.2: 游戏模式激活状态（持久化）
         self.wizard_done = False  # v2.2.1: 首次运行向导是否已完成
         self.rules = []  # v2.0: 进程规则列表
@@ -85,28 +86,28 @@ class ConfigManager:
             bool: 是否加载成功
         """
         default_config = {
-            "config_version": 3,
+            "config_version": 4,
             "notifications": {"enabled": True},
-            "logging": {"retention_days": 7, "rotation": "1 day", "debug_mode": False},
+            "logging": {"retention_days": 7, "rotation": "1 day"},
             "application": {
                 "auto_start": True, "auto_start_force": True,
                 "close_to_tray": True, "theme": "dark",
                 "startup_delay": 30, "wizard_done": False,  # v2.2.1: 首次向导完成标记
             },
-            "monitor": {"enabled": False, "use_wmi": True, "kill_ace_tray": False},
+            "monitor": {"enabled": True, "use_wmi": True},
             "memory_cleaner": {
-                "enabled": False,
-                "brute_mode": True,
-                "switches": [True, True, False, False, False, False],
-                "interval": 300,
-                "threshold": 80.0,
+                "enabled": True,
+                "brute_mode": False,
+                "switches": [True, False, False, False, True, False],
+                "interval": 600,
+                "threshold": 85.0,
                 "cooldown": 60,
             },
             "io_priority": {
                 "processes": [{"name": "SGuard64.exe", "priority": 0}]
             },
             "ramdisk": {
-                "enabled": False,
+                "enabled": True,
                 "auto_cleanup": True,
             },
             "game_mode": {"active": False},
@@ -137,15 +138,12 @@ class ConfigManager:
                     self.show_notifications = bool(config_data["notifications"]["enabled"])
                     logger.debug(f"已从配置文件加载通知设置: {self.show_notifications}")
 
-                # 读取日志设置
+                # 读取日志设置（v2.3.0: 仅保留保留天数与轮转周期，不再暴露调试模式）
                 if "logging" in config_data:
                     if "retention_days" in config_data["logging"]:
                         self.log_retention_days = int(config_data["logging"]["retention_days"])
                     if "rotation" in config_data["logging"]:
                         self.log_rotation = config_data["logging"]["rotation"]
-                    if "debug_mode" in config_data["logging"]:
-                        self.debug_mode = bool(config_data["logging"]["debug_mode"])
-                        logger.debug(f"已从配置文件加载调试模式设置: {self.debug_mode}")
 
                 # 读取开机自启设置
                 if "application" in config_data and "auto_start" in config_data["application"]:
@@ -254,11 +252,7 @@ class ConfigManager:
                         self.ramdisk_auto_cleanup = bool(config_data["ramdisk"]["auto_cleanup"])
                     logger.debug(f"已从配置文件加载RAM盘设置: enabled={self.ramdisk_enabled}")
 
-                # 读取 ACE-Tray 自动关闭设置 (v2.2)
-                if "monitor" in config_data and "kill_ace_tray" in config_data["monitor"]:
-                    self.kill_ace_tray = bool(config_data["monitor"]["kill_ace_tray"])
-                    logger.debug(f"已从配置文件加载 ACE-Tray 自动关闭设置: {self.kill_ace_tray}")
-
+                # 读取 ACE-Tray 设置 (v2.3.0: 弹窗拦截已移除，忽略老配置中的该字段)
                 # 读取游戏模式状态 (v2.2)
                 if "game_mode" in config_data and "active" in config_data["game_mode"]:
                     self.game_mode_active = bool(config_data["game_mode"]["active"])
@@ -307,14 +301,12 @@ class ConfigManager:
             self.show_notifications = default_config["notifications"]["enabled"]
             self.log_retention_days = default_config["logging"]["retention_days"]
             self.log_rotation = default_config["logging"]["rotation"]
-            self.debug_mode = default_config["logging"]["debug_mode"]
             self.auto_start = default_config["application"]["auto_start"]
             self.auto_start_force = default_config["application"].get("auto_start_force", True)
             self.close_to_tray = default_config["application"]["close_to_tray"]
             self.theme = default_config["application"]["theme"]
             self.wizard_done = default_config["application"].get("wizard_done", False)
             self.monitor_enabled = default_config["monitor"]["enabled"]
-            self.kill_ace_tray = default_config["monitor"].get("kill_ace_tray", False)
 
             # 加载内存清理默认设置
             if "memory_cleaner" in default_config:
@@ -407,6 +399,28 @@ class ConfigManager:
                     yaml.dump(config_data, f, default_flow_style=False, allow_unicode=True)
                 logger.success("配置文件已迁移到 v2.2")
 
+            # v3 -> v4: v2.3.0 移除日志调试模式 / 弹窗拦截，固定内存与 RAM 盘策略
+            if current_version < 4:
+                if "logging" in config_data and isinstance(config_data["logging"], dict):
+                    config_data["logging"].pop("debug_mode", None)
+                if "monitor" in config_data and isinstance(config_data["monitor"], dict):
+                    config_data["monitor"].pop("kill_ace_tray", None)
+                    config_data["monitor"]["enabled"] = True
+                if "memory_cleaner" in config_data:
+                    config_data["memory_cleaner"]["enabled"] = True
+                    config_data["memory_cleaner"]["brute_mode"] = False
+                    config_data["memory_cleaner"]["switches"] = [True, False, False, False, True, False]
+                    config_data["memory_cleaner"]["interval"] = 600
+                    config_data["memory_cleaner"]["threshold"] = 85.0
+                if "ramdisk" in config_data:
+                    config_data["ramdisk"]["enabled"] = True
+
+                config_data["config_version"] = 4
+
+                with open(self.config_file, "w", encoding="utf-8") as f:
+                    yaml.dump(config_data, f, default_flow_style=False, allow_unicode=True)
+                logger.success("配置文件已迁移到 v2.3.0")
+
         except Exception as e:
             logger.error(f"配置迁移失败: {e}")
 
@@ -425,7 +439,6 @@ class ConfigManager:
                 "logging": {
                     "retention_days": self.log_retention_days,
                     "rotation": self.log_rotation,
-                    "debug_mode": self.debug_mode,
                 },
                 "application": {
                     "auto_start": self.auto_start,
@@ -438,7 +451,6 @@ class ConfigManager:
                 "monitor": {
                     "enabled": self.monitor_enabled,
                     "use_wmi": self.use_wmi,
-                    "kill_ace_tray": self.kill_ace_tray,
                 },
                 "memory_cleaner": {
                     "enabled": self.memory_cleaner_enabled,

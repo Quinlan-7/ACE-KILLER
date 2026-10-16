@@ -250,13 +250,35 @@ class MemoryCleanerManager:
             logger.error(f"清理进程工作集失败: {str(e)}")
             return 0
     
+    # v2.3.0: 跳过游戏与受保护进程，避免清理时游戏卡顿
+    _SKIP_PROCESS_NAMES = {
+        "valorant-win64-shipping.exe", "valorant.exe",
+        "crossfire.exe", "dnf.exe", "wegame.exe",
+        "steam.exe", "steamwebhelper.exe",
+        "sguard64.exe", "sguard64.dll",  # ACE 自身
+        "ace-tray.exe", "anticheatexpert.exe",
+        "cs2.exe", "csgo.exe", "dota2.exe",
+        "league of legends.exe", "leagueclient.exe",
+        "gta5.exe", "rdo.exe",
+        "explorer.exe", "dwm.exe", "csrss.exe", "wininit.exe",
+        "services.exe", "lsass.exe", "smss.exe", "winlogon.exe",
+        "systemsettings.exe", "startmenuexperiencehost.exe",
+        "searchui.exe", "shellexperiencehost.exe",
+    }
+
     def _trim_processes_individually(self):
-        """逐个进程清理工作集（权限要求较低的方法）"""
-        logger.debug("使用逐个进程清理模式")
+        """逐个进程清理工作集（v2.3.0: 跳过游戏/系统关键进程，加入小延迟避免 CPU 尖峰）"""
+        logger.debug("使用逐个进程清理模式（温和策略，跳过游戏与系统进程）")
         use_debug_privilege = self.available_functions.get("debug_other_processes", False)
-        
+
+        trimmed = 0
         for proc in psutil.process_iter(['pid', 'name']):
             try:
+                name = (proc.info.get('name') or "").lower()
+                # 跳过游戏与系统关键进程
+                if name in self._SKIP_PROCESS_NAMES:
+                    continue
+
                 # 根据权限选择打开进程的方式
                 if use_debug_privilege:
                     handle = windll.kernel32.OpenProcess(
@@ -271,7 +293,7 @@ class MemoryCleanerManager:
                         False,
                         proc.info['pid']
                     )
-                    
+
                     if not handle:
                         # 再次尝试最低权限
                         handle = windll.kernel32.OpenProcess(
@@ -279,10 +301,15 @@ class MemoryCleanerManager:
                             False,
                             proc.info['pid']
                         )
-                
+
                 if handle:
                     windll.psapi.EmptyWorkingSet(handle)
                     windll.kernel32.CloseHandle(handle)
+                    trimmed += 1
+
+                    # v2.3.0: 每清理 20 个进程休眠 5ms，避免 CPU 尖峰导致卡顿
+                    if trimmed % 20 == 0:
+                        time.sleep(0.005)
             except Exception:
                 # 忽略无法清理的进程
                 pass
@@ -325,13 +352,13 @@ class MemoryCleanerManager:
             return 0
     
     def clean_memory_all(self):
-        """全面清理系统内存"""
+        """全面清理系统内存（v2.3.0: 移除待机列表清理，避免游戏时卡顿）"""
         try:
-            logger.debug("全面清理系统内存")
-            
+            logger.debug("全面清理系统内存（温和策略）")
+
             # 获取清理前的可用内存
             before_available = self._get_memory_before_clean()
-            
+
             # 1. 合并物理内存 (Windows 8+)
             try:
                 combine_info = MEMORY_COMBINE_INFORMATION_EX()
@@ -346,7 +373,7 @@ class MemoryCleanerManager:
                     logger.warning(f"合并物理内存失败，错误码: {status}")
             except Exception as e:
                 logger.debug(f"合并物理内存失败 (可能系统版本不支持): {str(e)}")
-            
+
             # 2. 清理系统工作集
             info = SYSTEM_FILECACHE_INFORMATION()
             info.MinimumWorkingSet = -1
@@ -360,7 +387,7 @@ class MemoryCleanerManager:
                 logger.debug("清理系统工作集成功")
             else:
                 logger.warning(f"清理系统工作集失败，错误码: {status}")
-            
+
             # 3. 清理进程工作集
             command = MemoryEmptyWorkingSets
             status = self.NtSetSystemInformation(
@@ -372,51 +399,18 @@ class MemoryCleanerManager:
                 logger.debug("清理进程工作集成功")
             else:
                 logger.warning(f"清理进程工作集失败，错误码: {status}")
-            
-            # 4. 清理低优先级待机列表
-            command = MemoryPurgeLowPriorityStandbyList
-            status = self.NtSetSystemInformation(
-                SystemMemoryListInformation,
-                byref(wintypes.ULONG(command)),
-                sizeof(wintypes.ULONG)
-            )
-            if status == 0:
-                logger.debug("清理低优先级待机列表成功")
-            else:
-                logger.warning(f"清理低优先级待机列表失败，错误码: {status}")
-            
-            # 5. 清理待机列表
-            command = MemoryPurgeStandbyList
-            status = self.NtSetSystemInformation(
-                SystemMemoryListInformation,
-                byref(wintypes.ULONG(command)),
-                sizeof(wintypes.ULONG)
-            )
-            if status == 0:
-                logger.debug("清理待机列表成功")
-            else:
-                logger.warning(f"清理待机列表失败，错误码: {status}")
-            
-            # 6. 清理修改页面列表
-            command = MemoryFlushModifiedList
-            status = self.NtSetSystemInformation(
-                SystemMemoryListInformation,
-                byref(wintypes.ULONG(command)),
-                sizeof(wintypes.ULONG)
-            )
-            if status == 0:
-                logger.debug("清理修改页面列表成功")
-            else:
-                logger.warning(f"清理修改页面列表失败，错误码: {status}")
-            
+
+            # v2.3.0: 移除 MemoryPurgeStandbyList / MemoryPurgeLowPriorityStandbyList /
+            # MemoryFlushModifiedList —— 这些操作会丢弃磁盘缓存，导致游戏加载卡顿。
+
             # 计算清理的内存量
             after_available = self._get_memory_before_clean()
             cleaned_mb = max(0, (after_available - before_available) / (1024 * 1024))
             self._record_cleaned_memory(cleaned_mb)
             logger.debug(f"全面清理系统内存完成，释放了 {cleaned_mb:.2f}MB 内存")
-            
+
             return cleaned_mb
-            
+
         except Exception as e:
             logger.error(f"全面清理系统内存失败: {str(e)}")
             return 0
@@ -589,10 +583,10 @@ class MemoryCleanerManager:
     
     def set_clean_interval(self, seconds):
         """设置清理间隔时间"""
-        # 确保时间不小于60秒
-        if seconds < 60:
-            seconds = 60
-            logger.warning("清理间隔不能小于60秒，已自动调整为60秒")
+        # v2.3.0: 最小 300 秒（5 分钟），避免频繁清理导致卡顿
+        if seconds < 300:
+            seconds = 300
+            logger.warning("清理间隔不能小于300秒，已自动调整为300秒")
         
         self.clean_interval = seconds
         logger.debug(f"内存清理间隔已设置为 {seconds} 秒")

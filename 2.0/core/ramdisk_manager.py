@@ -160,21 +160,26 @@ class RamdiskManager:
         logger.success(f"重定向根目录就绪: {temp_path}")
 
     def _setup_redirects(self):
-        """设置 ACE 临时目录重定向到 RAM 盘"""
+        """设置 ACE 临时目录重定向到 RAM 盘
+
+        v2.3.0: 改用 mklink /J（目录联接 / Junction）而非 /D（符号链接），
+        Junction 不需要 SeCreateSymbolicLinkPrivilege，管理员权限下即可创建，
+        且对普通进程（游戏）完全可见。
+        """
         self.redirected_count = 0
 
         for temp_path in self.ace_temp_paths:
             try:
-                if not os.path.exists(temp_path):
+                if not temp_path:
                     continue
 
-                if os.path.islink(temp_path):
-                    continue
+                # 情况 1: 路径不存在 —— 直接创建 Junction 指向 RAM 盘
+                # 情况 2: 路径已存在且是 Junction/符号链接 —— 先删除旧链接再重建
+                # 情况 3: 路径是真实目录且无备份 —— 重命名为 _backup 后创建 Junction
+                # 情况 4: 路径是真实目录且已有备份 —— 删除当前目录内容（保留备份），创建 Junction
 
+                is_link = os.path.islink(temp_path)
                 backup_path = f"{temp_path}_backup"
-                if os.path.exists(temp_path) and not os.path.exists(backup_path):
-                    os.rename(temp_path, backup_path)
-                    logger.info(f"已备份目录: {temp_path}")
 
                 ram_target = os.path.join(
                     self.ram_root or os.path.join(os.environ["TEMP"], "ACE_RAMDisk"),
@@ -183,21 +188,47 @@ class RamdiskManager:
                 )
                 os.makedirs(ram_target, exist_ok=True)
 
-                subprocess.run(
-                    f"mklink /D \"{temp_path}\" \"{ram_target}\"",
-                    shell=True, check=True, capture_output=True
-                )
+                if os.path.exists(temp_path) and not is_link:
+                    # 真实目录：需要先备份或清理
+                    if not os.path.exists(backup_path):
+                        os.rename(temp_path, backup_path)
+                        logger.info(f"已备份目录: {temp_path} -> {backup_path}")
+                    else:
+                        # 备份已存在，当前目录是残留内容，直接删除后建 Junction
+                        import shutil
+                        shutil.rmtree(temp_path, ignore_errors=True)
+                elif is_link:
+                    # 已有链接，删除后重建
+                    os.unlink(temp_path)
 
-                logger.success(
-                    f"重定向: {os.path.basename(temp_path)} -> RAM 盘"
-                )
-                self.redirected_count += 1
+                # 确保 temp_path 不存在再创建 Junction
+                if not os.path.exists(temp_path):
+                    result = subprocess.run(
+                        f'mklink /J "{temp_path}" "{ram_target}"',
+                        shell=True, capture_output=True, text=True
+                    )
+                    if result.returncode == 0:
+                        logger.success(
+                            f"Junction 重定向: {temp_path} -> {ram_target}"
+                        )
+                        self.redirected_count += 1
+                    else:
+                        logger.error(
+                            f"Junction 创建失败 ({temp_path}): "
+                            f"{result.stderr.strip() or result.stdout.strip()}"
+                        )
+                        # 回退：恢复备份
+                        if os.path.exists(backup_path) and not os.path.exists(temp_path):
+                            os.rename(backup_path, temp_path)
 
-            except Exception:
+            except Exception as e:
+                logger.error(f"重定向 {temp_path} 失败: {e}")
                 continue
 
         if self.redirected_count > 0:
             logger.success(f"成功重定向 {self.redirected_count} 个目录到 RAM 盘")
+        else:
+            logger.warning("未成功重定向任何目录（路径可能不存在或权限不足）")
 
     def cleanup_ramdisk(self):
         """清理 RAM 盘和重定向
@@ -229,15 +260,21 @@ class RamdiskManager:
             except Exception as e:
                 logger.debug(f"清理 ImDisk RAM 盘失败: {e}")
 
-            # 恢复原始目录
+            # 恢复原始目录（v2.3.0: 兼容 Junction 与符号链接）
             for temp_path in self.ace_temp_paths:
                 try:
-                    if os.path.islink(temp_path):
-                        os.unlink(temp_path)
-                        backup_path = f"{temp_path}_backup"
-                        if os.path.exists(backup_path):
-                            os.rename(backup_path, temp_path)
-                except Exception:
+                    if not temp_path:
+                        continue
+                    if not os.path.exists(temp_path):
+                        continue
+                    # Junction / 符号链接：删除链接本身（不影响目标内容）
+                    if os.path.islink(temp_path) or self._is_junction(temp_path):
+                        os.rmdir(temp_path)
+                    backup_path = f"{temp_path}_backup"
+                    if os.path.exists(backup_path) and not os.path.exists(temp_path):
+                        os.rename(backup_path, temp_path)
+                except Exception as e:
+                    logger.debug(f"恢复 {temp_path} 失败: {e}")
                     continue
 
             # v2.2.3: 清理物理重定向根下的 ACE_Temp 内容（保留根目录）
@@ -279,6 +316,22 @@ class RamdiskManager:
             if os.path.exists(path):
                 return path
         return None
+
+    @staticmethod
+    def _is_junction(path: str) -> bool:
+        """检测目录是否为 Junction（目录联接）"""
+        try:
+            import ctypes
+            from ctypes import wintypes
+            GetFileAttributesW = ctypes.windll.kernel32.GetFileAttributesW
+            INVALID_FILE_ATTRIBUTES = -1
+            FILE_ATTRIBUTE_REPARSE_POINT = 0x400
+            attrs = GetFileAttributesW(path)
+            if attrs == INVALID_FILE_ATTRIBUTES:
+                return False
+            return bool(attrs & FILE_ATTRIBUTE_REPARSE_POINT)
+        except Exception:
+            return False
 
     def get_ramdisk_info(self):
         """获取 RAM 盘信息

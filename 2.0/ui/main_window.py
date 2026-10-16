@@ -157,7 +157,7 @@ class MainWindow(QWidget):
         self.signal_bus.theme_changed.connect(self.switch_theme)
         self.signal_bus.tray_status_changed.connect(self._on_tray_status_changed)
 
-        self.setWindowTitle("ACE-KILLER v2.2.3")
+        self.setWindowTitle("ACE-KILLER v2.3.0")
         self.setMinimumSize(600, 780)
         
         # 设置无边框窗口
@@ -213,40 +213,20 @@ class MainWindow(QWidget):
         status_group.setLayout(status_box_layout)
         status_layout.addWidget(status_group)
         
-        # 进程监控选项卡
+        # 进程监控选项卡（v2.3.0: 移除 ACE-Tray 弹窗监控 UI，保留进程优先级管理）
         process_tab = QWidget()
         process_layout = QVBoxLayout(process_tab)
-        
-        # 进程监控组
-        process_group = QGroupBox("🚫 ACE反作弊弹窗监控")
-        process_box_layout = QVBoxLayout()
-        
-        # 添加ACE反作弊说明标签
-        self.ace_info_label = QLabel(
-            "🎯 监控目标：ACE-Tray.exe（反作弊安装弹窗进程）\n"
-            "⚡ 功能说明：自动检测并终止ACE反作弊安装弹窗，防止强制安装（可在设置中关闭）\n"
-            "💡 提示: 进程优化设置在进程重启后会恢复默认值，建议将常用进程添加到自动优化列表中实现持续优化。\n"
-            "🛡️ 效能核心绑定：自动识别 CPU 拓扑（AMD 物理核心 / Intel 能效核），最大限度让出主核资源。\n"
+
+        # 提示标签
+        ace_info_label = QLabel(
+            "🛡️ SGuard64.exe 效能优化（护 SSD）\n"
+            "⚙️ 进程 I/O / CPU 优先级管理\n"
+            "🧠 拓扑感知效能核绑定（自动让出主核）\n"
+            "💡 进程优化在进程重启后会恢复默认值，建议将常用进程加入自动优化列表。"
         )
-        self.ace_info_label.setWordWrap(True)
-        StyleHelper.set_label_type(self.ace_info_label, "info")
-        process_box_layout.addWidget(self.ace_info_label)
-        
-        # 添加监控状态显示
-        status_layout = QHBoxLayout()
-        
-        # 添加监控开关
-        self.monitor_checkbox = QCheckBox("启用ACE弹窗监控")
-        self.monitor_checkbox.setChecked(self.monitor.running)
-        self.monitor_checkbox.stateChanged.connect(self.toggle_process_monitor)
-        status_layout.addWidget(self.monitor_checkbox)
-        
-        status_layout.addStretch()
-        
-        process_box_layout.addLayout(status_layout)
-        
-        process_group.setLayout(process_box_layout)
-        process_layout.addWidget(process_group)
+        ace_info_label.setWordWrap(True)
+        StyleHelper.set_label_type(ace_info_label, "info")
+        process_layout.addWidget(ace_info_label)
         
         # 添加I/O优先级设置功能到进程监控选项卡
         io_priority_group = QGroupBox("🚀 进程优先级管理")
@@ -520,21 +500,8 @@ class MainWindow(QWidget):
         startup_group.setLayout(startup_layout)
         settings_layout.addWidget(startup_group)
 
-        # v2.2: 监控设置
-        monitor_settings_group = QGroupBox("监控设置")
-        monitor_settings_layout = QVBoxLayout()
-        self.kill_tray_checkbox = QCheckBox("自动终止 ACE-Tray.exe（反作弊安装弹窗）")
-        self.kill_tray_checkbox.stateChanged.connect(self.toggle_kill_ace_tray)
-        monitor_settings_layout.addWidget(self.kill_tray_checkbox)
-        kill_tray_info = QLabel(
-            "💡 关闭后不再终止 ACE-Tray.exe，改为将其切换为效能模式（低优先级），兼顾兼容性"
-        )
-        kill_tray_info.setWordWrap(True)
-        StyleHelper.set_label_type(kill_tray_info, "info")
-        monitor_settings_layout.addWidget(kill_tray_info)
-        monitor_settings_group.setLayout(monitor_settings_layout)
-        settings_layout.addWidget(monitor_settings_group)
-        
+        # v2.3.0: 已移除「监控设置」组（ACE-Tray 弹窗拦截功能）与「日志设置」组（调试模式开关）
+
         # 窗口行为设置
         window_group = QGroupBox("窗口行为设置")
         window_layout = QVBoxLayout()
@@ -561,16 +528,7 @@ class MainWindow(QWidget):
         
         window_group.setLayout(window_layout)
         settings_layout.addWidget(window_group)
-        
-        # 日志设置
-        log_group = QGroupBox("日志设置")
-        log_layout = QVBoxLayout()
-        self.debug_checkbox = QCheckBox("启用调试模式")
-        self.debug_checkbox.stateChanged.connect(self.toggle_debug_mode)
-        log_layout.addWidget(self.debug_checkbox)
-        log_group.setLayout(log_layout)
-        settings_layout.addWidget(log_group)
-        
+
         # 主题设置
         theme_group = QGroupBox("主题设置")
         theme_layout = QVBoxLayout()
@@ -799,13 +757,7 @@ class MainWindow(QWidget):
         self.startup_action.triggered.connect(self.toggle_auto_start_from_tray)
         tray_menu.addAction(self.startup_action)
         
-        # 进程监控菜单项
-        self.monitor_action = QAction("启用ACE弹窗监控", self)
-        self.monitor_action.setCheckable(True)
-        self.monitor_action.setChecked(self.monitor.running)
-        self.monitor_action.triggered.connect(self.toggle_process_monitor_from_tray)
-        tray_menu.addAction(self.monitor_action)
-        
+        # v2.3.0: 移除「启用ACE弹窗监控」托盘菜单项（弹窗拦截功能已删除）
         tray_menu.addSeparator()
 
         # 主题切换子菜单
@@ -1030,20 +982,10 @@ class MainWindow(QWidget):
         
         html.append('</div>')
         
-        # 进程状态卡片
+        # 进程状态卡片（v2.3.0: 移除 ACE-Tray 弹窗进程状态，仅保留 SGuard64）
         html.append('<div class="card">')
         html.append('<div class="section-title">进程状态</div>')
-        
-        # ACE进程状态(ACE反作弊程序是否安装提示弹窗)
-        ace_running = self.monitor.is_process_running(self.monitor.anticheat_name) is not None
-        
-        if ace_running and self.monitor.anticheat_killed:
-            html.append('<p class="status-item">✅ ACE-Tray进程: <span class="status-success">已被终止</span>  (反作弊安装弹窗进程)</p>')
-        elif ace_running:
-            html.append('<p class="status-item">🔄 ACE-Tray进程: <span class="status-warning">正在处理</span>  (反作弊安装弹窗进程)</p>')
-        else:
-            html.append('<p class="status-item">ℹ️ ACE-Tray进程: <span class="status-normal">未处理</span>  (反作弊安装弹窗进程)</p>')
-        
+
         # SGuard64进程状态
         scan_running = self.monitor.is_process_running(self.monitor.scanprocess_name) is not None
         
@@ -1158,12 +1100,7 @@ class MainWindow(QWidget):
         close_behavior_text = "最小化到后台" if self.monitor.config_manager.close_to_tray else "直接退出程序"
         close_behavior_class = "status-normal"
         html.append(f'<p class="status-item">🪟 关闭行为: <span class="{close_behavior_class}" style="font-weight: bold;">{close_behavior_text}</span></p>')
-        
-        # 调试模式状态
-        debug_class = "status-success" if self.monitor.config_manager.debug_mode else "status-disabled"
-        debug_text = "已启用" if self.monitor.config_manager.debug_mode else "已禁用"
-        html.append(f'<p class="status-item">🐛 调试模式: <span class="{debug_class}" style="font-weight: bold;">{debug_text}</span></p>')
-        
+
         # 主题状态
         html.append(f'<p class="status-item">🎨 当前主题: <span class="status-normal" style="font-weight: bold;">{self._get_theme_display_name()}</span></p>')
         
@@ -1217,34 +1154,17 @@ class MainWindow(QWidget):
         self.startup_checkbox.setChecked(self.monitor.config_manager.auto_start)
         self.startup_action.setChecked(self.monitor.config_manager.auto_start)
 
-        # v2.2: 强制自启动与 ACE-Tray 终止设置
+        # v2.3.0: 强制自启动设置（弹窗拦截与调试模式 UI 已移除）
         self.startup_force_checkbox.setChecked(
             self.monitor.config_manager.auto_start_force
         )
-        self.kill_tray_checkbox.setChecked(
-            self.monitor.config_manager.kill_ace_tray
-        )
-        
-        # 更新监控状态设置（从配置管理器加载）
-        monitor_enabled = self.monitor.config_manager.monitor_enabled
-        self.monitor_checkbox.setChecked(monitor_enabled)
-        self.monitor_action.setChecked(monitor_enabled)
-        
-        # 根据配置启动或停止监控
-        if monitor_enabled and not self.monitor.running:
+
+        # v2.3.0: 监控固定启用（SGuard64 效能优化），不再提供开关
+        if not self.monitor.running:
             self.monitor.running = True
             self.monitor.start_monitors()
-            logger.debug("根据配置启动监控程序")
-        elif not monitor_enabled and self.monitor.running:
-            self.monitor.running = False
-            self.monitor.stop_monitors()
-            self.monitor.anticheat_killed = False
-            self.monitor.scanprocess_optimized = False
-            logger.debug("根据配置停止监控程序")
-        
-        # 更新调试模式设置
-        self.debug_checkbox.setChecked(self.monitor.config_manager.debug_mode)
-        
+        logger.debug("SGuard64 效能监控已固定启用")
+
         # 更新关闭行为设置
         # 根据配置值设置下拉框选择
         close_to_tray = self.monitor.config_manager.close_to_tray
@@ -1253,22 +1173,27 @@ class MainWindow(QWidget):
                 self.close_behavior_combo.setCurrentIndex(i)
                 break
         
-        # 加载内存清理设置
+        # 加载内存清理设置（v2.3.0: 策略已固定，UI 控件禁用但展示当前值）
         # 使用配置中的enabled属性设置复选框状态
         self.memory_checkbox.setChecked(self.memory_cleaner.enabled)
-        
+        self.memory_checkbox.setEnabled(False)  # v2.3.0: 固定启用，禁用开关
+
         # 如果enabled为true但未运行，则启动内存清理线程
         if self.memory_cleaner.enabled and not self.memory_cleaner.running:
             self.memory_cleaner.start_cleaner_thread()
-        
+
         # 加载暴力模式设置
         self.brute_mode_checkbox.setChecked(self.memory_cleaner.brute_mode)
-        
+        self.brute_mode_checkbox.setEnabled(False)  # v2.3.0: 固定为温和模式
+
         # 加载自定义配置设置
         self.interval_spinbox.setValue(self.memory_cleaner.clean_interval)
         self.threshold_spinbox.setValue(self.memory_cleaner.threshold)
         self.cooldown_spinbox.setValue(self.memory_cleaner.cooldown_time)
-        
+        self.interval_spinbox.setEnabled(False)  # v2.3.0: 固定参数
+        self.threshold_spinbox.setEnabled(False)
+        self.cooldown_spinbox.setEnabled(False)
+
         # 更新清理选项标签文本
         self.clean_option1.setText(f"定时清理(每{self.memory_cleaner.clean_interval}秒)，截取进程工作集")
         self.clean_option2.setText(f"定时清理(每{self.memory_cleaner.clean_interval}秒)，清理系统缓存")
@@ -1276,14 +1201,17 @@ class MainWindow(QWidget):
         self.clean_option4.setText(f"若内存使用量超出{self.memory_cleaner.threshold}%，截取进程工作集")
         self.clean_option5.setText(f"若内存使用量超出{self.memory_cleaner.threshold}%，清理系统缓存")
         self.clean_option6.setText(f"若内存使用量超出{self.memory_cleaner.threshold}%，用全部可能的方法清理内存")
-        
-        # 加载清理选项设置
+
+        # 加载清理选项设置（v2.3.0: 固定策略，禁用用户修改）
         self.clean_option1.setChecked(self.memory_cleaner.clean_switches[0])
         self.clean_option2.setChecked(self.memory_cleaner.clean_switches[1])
         self.clean_option3.setChecked(self.memory_cleaner.clean_switches[2])
         self.clean_option4.setChecked(self.memory_cleaner.clean_switches[3])
         self.clean_option5.setChecked(self.memory_cleaner.clean_switches[4])
         self.clean_option6.setChecked(self.memory_cleaner.clean_switches[5])
+        for cb in [self.clean_option1, self.clean_option2, self.clean_option3,
+                   self.clean_option4, self.clean_option5, self.clean_option6]:
+            cb.setEnabled(False)
 
         self.update_status()
         self.blockSignals(False)
@@ -1433,14 +1361,16 @@ class MainWindow(QWidget):
             logger.error(f"自动创建 RAM 盘异常: {e}")
 
     def toggle_ramdisk(self, state):
-        """切换 RAM 盘重定向"""
+        """切换 RAM 盘重定向（v2.3.0: 切换即真实创建/清理，不再仅保存配置）"""
         enabled = bool(state)
         self.monitor.config_manager.ramdisk_enabled = enabled
         self.monitor.config_manager.save_config()
         if enabled:
-            logger.info("RAM 盘重定向已启用")
+            logger.info("RAM 盘重定向已启用，立即挂载...")
+            self.start_ramdisk()
         else:
-            logger.info("RAM 盘重定向已禁用")
+            logger.info("RAM 盘重定向已禁用，立即清理...")
+            self.stop_ramdisk()
 
     def start_ramdisk(self):
         """启动 RAM 盘"""
@@ -1592,69 +1522,11 @@ class MainWindow(QWidget):
         self.update_status()
 
     @Slot()
-    def toggle_kill_ace_tray(self):
-        """切换 ACE-Tray.exe 自动终止（v2.2）"""
-        enabled = self.kill_tray_checkbox.isChecked()
-        self.monitor.config_manager.kill_ace_tray = enabled
-        if self.monitor.config_manager.save_config():
-            logger.debug(f"ACE-Tray 自动终止设置已更改并保存: {enabled}")
-        self.update_status()
-
-    @Slot()
     def open_project_page(self):
         """打开项目主页"""
         from utils.version_checker import GITHUB_REPO
         webbrowser.open(f"https://github.com/{GITHUB_REPO}")
-    
-    def _toggle_process_monitor(self, from_tray=False):
-        """通用进程监控切换方法"""
-        enabled = self.monitor_action.isChecked() if from_tray else self.monitor_checkbox.isChecked()
-        
-        if enabled:
-            self.monitor.running = True
-            self.monitor.start_monitors()
-            logger.debug("监控程序已启动")
-        else:
-            self.monitor.running = False
-            self.monitor.stop_monitors()
-            self.monitor.anticheat_killed = False
-            self.monitor.scanprocess_optimized = False
-            logger.debug("监控程序已停止")
-        
-        # 保存监控状态到配置管理器
-        self.monitor.config_manager.monitor_enabled = enabled
-        
-        # 同步界面状态
-        if from_tray:
-            # 同步主窗口状态
-            self.monitor_checkbox.blockSignals(True)
-            self.monitor_checkbox.setChecked(enabled)
-            self.monitor_checkbox.blockSignals(False)
-        else:
-            # 同步托盘菜单状态
-            self.monitor_action.blockSignals(True)
-            self.monitor_action.setChecked(enabled)
-            self.monitor_action.blockSignals(False)
-        
-        # 保存配置
-        if self.monitor.config_manager.save_config():
-            logger.debug(f"监控状态已更改并保存: {'开启' if enabled else '关闭'}")
-        else:
-            logger.warning(f"监控状态已更改但保存失败: {'开启' if enabled else '关闭'}")
-        
-        # 立即更新状态显示
-        self.update_status()
-    
-    @Slot()
-    def toggle_process_monitor(self):
-        """切换进程监控开关"""
-        self._toggle_process_monitor(from_tray=False)
-    
-    @Slot()
-    def toggle_process_monitor_from_tray(self):
-        """从托盘菜单切换进程监控开关"""
-        self._toggle_process_monitor(from_tray=True)
-    
+
     @Slot()
     def open_config_dir(self):
         """打开配置目录"""
@@ -1968,31 +1840,6 @@ class MainWindow(QWidget):
             # 直接退出程序
             event.accept()
             self.exit_app()
-
-    @Slot()
-    def toggle_debug_mode(self):
-        """切换调试模式"""
-        # 获取新的调试模式状态
-        new_debug_mode = self.debug_checkbox.isChecked()
-        self.monitor.config_manager.debug_mode = new_debug_mode
-        
-        # 保存配置
-        if self.monitor.config_manager.save_config():
-            logger.debug(f"调试模式已更改并保存: {'开启' if new_debug_mode else '关闭'}")
-        else:
-            logger.warning(f"调试模式已更改但保存失败: {'开启' if new_debug_mode else '关闭'}")
-        
-        # 重新初始化日志系统
-        from utils.logger import setup_logger
-        setup_logger(
-            self.monitor.config_manager.log_dir,
-            self.monitor.config_manager.log_retention_days,
-            self.monitor.config_manager.log_rotation,
-            new_debug_mode
-        )
-        
-        # 立即更新状态显示
-        self.update_status()
 
     @Slot()
     def on_close_behavior_changed(self):
@@ -2681,17 +2528,8 @@ def get_status_info(monitor):
         return "程序未启动"
     
     status_lines = []
-    # 检查 ACE-Tray.exe 是否存在 (ACE反作弊程序是否安装提示弹窗)
-    ace_proc = monitor.is_process_running(monitor.anticheat_name)
-    if not ace_proc and monitor.anticheat_killed:
-        status_lines.append("✅ ACE-Tray进程：已终止")
-    elif not ace_proc:
-        status_lines.append("ℹ️ ACE-Tray进程：未运行")
-    elif ace_proc and monitor.anticheat_killed:
-        status_lines.append("⏳ ACE-Tray进程：处理中")
-    else:
-        status_lines.append("❗ ACE-Tray进程：需要处理")
-    
+    # v2.3.0: 移除 ACE-Tray 弹窗进程状态，仅保留 SGuard64 效能优化状态
+
     # 检查 SGuard64.exe 是否存在
     scan_proc = monitor.is_process_running(monitor.scanprocess_name) is not None
     if not scan_proc and monitor.scanprocess_optimized:
@@ -2737,11 +2575,8 @@ def get_status_info(monitor):
     status_lines.append("\n⚙️ 系统设置：")
     status_lines.append("  🔔 通知状态：" + ("开启" if monitor.config_manager.show_notifications else "关闭"))
     status_lines.append(f"  🔁 开机自启：{'开启' if monitor.config_manager.auto_start else '关闭'}")
-    status_lines.append(f"  🐛 调试模式：{'开启' if monitor.config_manager.debug_mode else '关闭'}")
     status_lines.append(f"  📁 配置目录：{monitor.config_manager.config_dir}")
-    status_lines.append(f"  📝 日志目录：{monitor.config_manager.log_dir}")
-    status_lines.append(f"  ⏱️ 日志保留：{monitor.config_manager.log_retention_days}天")
-    
+
     return "\n".join(status_lines)
 
 

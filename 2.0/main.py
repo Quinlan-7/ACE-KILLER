@@ -33,12 +33,12 @@ def main():
     # 创建配置管理器
     config_manager = ConfigManager()
     
-    # 配置日志系统
+    # 配置日志系统（v2.3.0: 不再暴露调试模式，固定 INFO 级别）
     setup_logger(
         config_manager.log_dir,
         config_manager.log_retention_days,
         config_manager.log_rotation,
-        config_manager.debug_mode
+        False
     )
     
     # v2.0: 处理 --delay 参数（延迟启动）
@@ -78,7 +78,7 @@ def main():
     get_disk_stats().start_monitoring()
     
     # 现在日志系统已初始化，可以记录启动信息
-    logger.debug("🟩 ACE-KILLER v2.2.3 程序已启动！")
+    logger.debug("🟩 ACE-KILLER v2.3.0 程序已启动！")
     
     # 查找图标文件
     icon_path = find_icon_path()
