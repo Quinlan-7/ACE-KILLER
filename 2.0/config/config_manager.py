@@ -415,6 +415,15 @@ class ConfigManager:
                 if "ramdisk" in config_data:
                     config_data["ramdisk"]["enabled"] = True
 
+                # v2.3.1: 清理 io_priority 中残留的 ACE-Tray.exe（弹窗拦截已移除）
+                if "io_priority" in config_data and isinstance(config_data["io_priority"], dict):
+                    procs = config_data["io_priority"].get("processes", [])
+                    if isinstance(procs, list):
+                        config_data["io_priority"]["processes"] = [
+                            p for p in procs
+                            if (p.get("name", "") if isinstance(p, dict) else str(p)) != "ACE-Tray.exe"
+                        ]
+
                 config_data["config_version"] = 4
 
                 with open(self.config_file, "w", encoding="utf-8") as f:

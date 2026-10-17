@@ -149,11 +149,11 @@ class MemoryCleanerManager:
         self.threshold = self.config_manager.memory_cleaner_threshold
         self.cooldown_time = self.config_manager.memory_cleaner_cooldown
         
-        # 确保清理间隔不低于60秒
-        if self.clean_interval < 60:
-            logger.warning(f"配置的清理间隔({self.clean_interval}秒)小于最小值60秒，将重置为60秒")
-            self.clean_interval = 60
-            self.config_manager.memory_cleaner_interval = 60
+        # 确保清理间隔不低于300秒（v2.3.1: 防止频繁清理导致卡顿）
+        if self.clean_interval < 300:
+            logger.warning(f"配置的清理间隔({self.clean_interval}秒)小于最小值300秒，将重置为300秒")
+            self.clean_interval = 300
+            self.config_manager.memory_cleaner_interval = 300
             self.config_manager.save_config()
         
         # 检查是否应该启动或停止清理线程

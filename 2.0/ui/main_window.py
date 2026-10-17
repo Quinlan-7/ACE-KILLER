@@ -157,11 +157,12 @@ class MainWindow(QWidget):
         self.signal_bus.theme_changed.connect(self.switch_theme)
         self.signal_bus.tray_status_changed.connect(self._on_tray_status_changed)
 
-        self.setWindowTitle("ACE-KILLER v2.3.0")
+        self.setWindowTitle("ACE-KILLER v2.3.1")
         self.setMinimumSize(600, 780)
         
         # 设置无边框窗口
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowSystemMenuHint)
+        # v2.3.1: Qt.Tool 让窗口不出现在任务栏（纯后台托盘程序）
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowSystemMenuHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WA_OpaquePaintEvent, False)
         
@@ -1173,10 +1174,11 @@ class MainWindow(QWidget):
                 self.close_behavior_combo.setCurrentIndex(i)
                 break
         
-        # 加载内存清理设置（v2.3.0: 策略已固定，UI 控件禁用但展示当前值）
-        # 使用配置中的enabled属性设置复选框状态
+        # 加载内存清理设置（v2.3.1: 恢复控件可交互，强制从配置同步状态）
+        # 强制从最新配置重新加载，避免单例初始化时读到旧值
+        self.memory_cleaner.update_from_config_manager()
+
         self.memory_checkbox.setChecked(self.memory_cleaner.enabled)
-        self.memory_checkbox.setEnabled(False)  # v2.3.0: 固定启用，禁用开关
 
         # 如果enabled为true但未运行，则启动内存清理线程
         if self.memory_cleaner.enabled and not self.memory_cleaner.running:
@@ -1184,15 +1186,11 @@ class MainWindow(QWidget):
 
         # 加载暴力模式设置
         self.brute_mode_checkbox.setChecked(self.memory_cleaner.brute_mode)
-        self.brute_mode_checkbox.setEnabled(False)  # v2.3.0: 固定为温和模式
 
         # 加载自定义配置设置
         self.interval_spinbox.setValue(self.memory_cleaner.clean_interval)
         self.threshold_spinbox.setValue(self.memory_cleaner.threshold)
         self.cooldown_spinbox.setValue(self.memory_cleaner.cooldown_time)
-        self.interval_spinbox.setEnabled(False)  # v2.3.0: 固定参数
-        self.threshold_spinbox.setEnabled(False)
-        self.cooldown_spinbox.setEnabled(False)
 
         # 更新清理选项标签文本
         self.clean_option1.setText(f"定时清理(每{self.memory_cleaner.clean_interval}秒)，截取进程工作集")
@@ -1202,16 +1200,13 @@ class MainWindow(QWidget):
         self.clean_option5.setText(f"若内存使用量超出{self.memory_cleaner.threshold}%，清理系统缓存")
         self.clean_option6.setText(f"若内存使用量超出{self.memory_cleaner.threshold}%，用全部可能的方法清理内存")
 
-        # 加载清理选项设置（v2.3.0: 固定策略，禁用用户修改）
+        # 加载清理选项设置
         self.clean_option1.setChecked(self.memory_cleaner.clean_switches[0])
         self.clean_option2.setChecked(self.memory_cleaner.clean_switches[1])
         self.clean_option3.setChecked(self.memory_cleaner.clean_switches[2])
         self.clean_option4.setChecked(self.memory_cleaner.clean_switches[3])
         self.clean_option5.setChecked(self.memory_cleaner.clean_switches[4])
         self.clean_option6.setChecked(self.memory_cleaner.clean_switches[5])
-        for cb in [self.clean_option1, self.clean_option2, self.clean_option3,
-                   self.clean_option4, self.clean_option5, self.clean_option6]:
-            cb.setEnabled(False)
 
         self.update_status()
         self.blockSignals(False)
